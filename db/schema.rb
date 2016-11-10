@@ -11,10 +11,11 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema.define(version: 20150506143609) do
+ActiveRecord::Schema.define(version: 20161028195936) do
 
   # These are extensions that must be enabled in order to support this database
   enable_extension "plpgsql"
+  enable_extension "pg_stat_statements"
 
   create_table "active_admin_comments", force: :cascade do |t|
     t.string   "resource_id",   limit: 255, null: false
@@ -50,11 +51,11 @@ ActiveRecord::Schema.define(version: 20150506143609) do
   add_index "admin_users", ["reset_password_token"], name: "index_admin_users_on_reset_password_token", unique: true, using: :btree
 
   create_table "annotation_categories", force: :cascade do |t|
-    t.string   "name",        limit: 255, null: false
-    t.string   "hex",         limit: 255
-    t.string   "css_classes", limit: 255
-    t.datetime "created_at",              null: false
-    t.datetime "updated_at",              null: false
+    t.string   "name",        null: false
+    t.string   "hex"
+    t.string   "css_classes"
+    t.datetime "created_at"
+    t.datetime "updated_at"
   end
 
   create_table "assignments", force: :cascade do |t|
@@ -103,6 +104,9 @@ ActiveRecord::Schema.define(version: 20150506143609) do
     t.datetime "processed_at"
     t.string   "survey_link",         limit: 255
     t.text     "default_state"
+    t.text     "snapshot"
+    t.string   "cove_uri"
+    t.string   "origin"
   end
 
   add_index "documents", ["slug"], name: "index_documents_on_slug", unique: true, using: :btree
@@ -117,6 +121,46 @@ ActiveRecord::Schema.define(version: 20150506143609) do
   add_index "friendly_id_slugs", ["slug", "sluggable_type"], name: "index_friendly_id_slugs_on_slug_and_sluggable_type", unique: true, using: :btree
   add_index "friendly_id_slugs", ["sluggable_id"], name: "index_friendly_id_slugs_on_sluggable_id", using: :btree
   add_index "friendly_id_slugs", ["sluggable_type"], name: "index_friendly_id_slugs_on_sluggable_type", using: :btree
+
+  create_table "oauth_access_grants", force: :cascade do |t|
+    t.integer  "resource_owner_id", null: false
+    t.integer  "application_id",    null: false
+    t.string   "token",             null: false
+    t.integer  "expires_in",        null: false
+    t.text     "redirect_uri",      null: false
+    t.datetime "created_at",        null: false
+    t.datetime "revoked_at"
+    t.string   "scopes"
+  end
+
+  add_index "oauth_access_grants", ["token"], name: "index_oauth_access_grants_on_token", unique: true, using: :btree
+
+  create_table "oauth_access_tokens", force: :cascade do |t|
+    t.integer  "resource_owner_id"
+    t.integer  "application_id"
+    t.string   "token",             null: false
+    t.string   "refresh_token"
+    t.integer  "expires_in"
+    t.datetime "revoked_at"
+    t.datetime "created_at",        null: false
+    t.string   "scopes"
+  end
+
+  add_index "oauth_access_tokens", ["refresh_token"], name: "index_oauth_access_tokens_on_refresh_token", unique: true, using: :btree
+  add_index "oauth_access_tokens", ["resource_owner_id"], name: "index_oauth_access_tokens_on_resource_owner_id", using: :btree
+  add_index "oauth_access_tokens", ["token"], name: "index_oauth_access_tokens_on_token", unique: true, using: :btree
+
+  create_table "oauth_applications", force: :cascade do |t|
+    t.string   "name",                      null: false
+    t.string   "uid",                       null: false
+    t.string   "secret",                    null: false
+    t.text     "redirect_uri",              null: false
+    t.string   "scopes",       default: "", null: false
+    t.datetime "created_at"
+    t.datetime "updated_at"
+  end
+
+  add_index "oauth_applications", ["uid"], name: "index_oauth_applications_on_uid", unique: true, using: :btree
 
   create_table "redactor_assets", force: :cascade do |t|
     t.integer  "user_id"
@@ -161,10 +205,13 @@ ActiveRecord::Schema.define(version: 20150506143609) do
   add_index "tags", ["name"], name: "index_tags_on_name", unique: true, using: :btree
 
   create_table "tenants", force: :cascade do |t|
-    t.string   "domain",        limit: 255
-    t.string   "database_name", limit: 255
-    t.datetime "created_at",                null: false
-    t.datetime "updated_at",                null: false
+    t.string   "domain",                        limit: 255
+    t.string   "database_name",                 limit: 255
+    t.datetime "created_at",                                                null: false
+    t.datetime "updated_at",                                                null: false
+    t.boolean  "mel_catalog_enabled",                       default: false
+    t.boolean  "annotation_categories_enabled",             default: false
+    t.string   "mel_catalog_url"
   end
 
   add_index "tenants", ["database_name"], name: "index_tenants_on_database_name", using: :btree
@@ -192,6 +239,10 @@ ActiveRecord::Schema.define(version: 20150506143609) do
     t.string   "affiliation",            limit: 255
     t.string   "slug",                   limit: 255
     t.boolean  "agreement"
+    t.string   "provider"
+    t.string   "uid"
+    t.integer  "cove_id"
+    t.string   "full_name"
   end
 
   add_index "users", ["confirmation_token"], name: "index_users_on_confirmation_token", unique: true, using: :btree

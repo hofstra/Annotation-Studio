@@ -14,30 +14,38 @@
     <meta name="google-site-verification" content="<%= ENV["GOOGLE_VERIFICATION_CODE"] %>" />
     <link href="/favicon.ico" rel="shortcut icon" />
     <%= javascript_include_tag "application" %>
-    <script type="text/javascript" src="//use.typekit.net/wod1jtz.js"></script>
-    <script type="text/javascript">try{Typekit.load();}catch(e){}</script>
+    <% if ENV["USE_TYPEKIT"] == true %>
+      <script type="text/javascript" src="//use.typekit.net/<%= ENV["TYPEKIT_CODE"] %>"></script>
+      <script type="text/javascript">try{Typekit.load();}catch(e){}</script>
+    <% end %>
+	<script type="text/javascript">
+		var icons = {
+			external_link: '<%= asset_path('external-link.png') %>',
+			file_image: '<%= asset_path('file-image.png')%>'
+		}
+	</script>
 </head>
 <body id="<%= yield(:body_id) %>" class="<%= yield(:body_class) %>">
 
     <nav class="navbar navbar-inverse navbar-fixed-top" id="navbar">
       <div class="container">
-      <a class="navbar-brand" href="/">Annotation Studio <span style="color:<%= $DOMAIN_CONFIG['site_color'] %>;"><%= $DOMAIN_CONFIG['site_name'] %></span></a>
-        <%= render "shared/user_menu" %>
+        <%= render_brand %>
       </div>
     </nav>
 
     <% if !current_user.nil?  %>
     <nav class="navmenu navmenu-inverse navmenu-fixed-left offcanvas" id="mainmenu" role="navigation">
-      <% unless params[:controller].include?('devise') %>
+      <% unless params[:controller].include?('registrations') %>
         <%= render "#{params[:controller]}/leftnav" %>
       <% end %>
     </nav>
 
     <nav class="navmenu navmenu-inverse navmenu-fixed-right offcanvas" id="toolsmenu" role="navigation">
-      <% unless params[:controller].include?('devise') %>
+      <% unless params[:controller].include?('registrations') %>
         <%= render "#{params[:controller]}/rightnav" %>
       <% end %>
     </nav>
+
     <nav class="navbar navbar-default navbar-fixed-top hidden-xs" id="lower-navbar">
       <div class="container">
         <div class="row">
@@ -54,6 +62,11 @@
     </nav>
     <% end %>
 
+	<% if params[:controller] == 'devise/sessions' %>
+	<div class="home-image">
+		<%= image_tag(home_banner, { alt: 'Cover Photo' }) %>
+	</div>
+<% end %>
     <div class="container">
       <%= render partial: "shared/noscript" %>
       <%= render partial: "shared/flash_messages", flash: flash %>

@@ -1,8 +1,9 @@
 # support for MEL catalog entries
 require 'melcatalog'
+require 'json'
 
 class DocumentsController < ApplicationController
-  before_filter :find_document, :only => [:show, :set_default_state, :destroy, :edit, :update]
+  before_filter :find_document, :only => [:show, :set_default_state, :preview, :post_to_cove, :annotatable, :review, :publish, :export, :archive, :snapshot, :destroy, :edit, :update]
   before_filter :authenticate_user!
 
   load_and_authorize_resource :except => :create
@@ -10,11 +11,27 @@ class DocumentsController < ApplicationController
   # GET /documents
   # GET /documents.json
   def index
-    # @documents = filter_by_can_read(Document.all)
 
-    # @documents = Document.all
-    @documents = Document.order("title")
-
+    if params[:docs] != 'assigned' && params[:docs] != 'created' && params[:docs] != 'all'
+      document_set = 'assigned'
+    else
+      document_set = params[:docs]
+    end    
+    
+    @tab_state = { document_set => 'active' }
+    @assigned_documents_count = Document.active.tagged_with(current_user.rep_group_list, :any =>true).count
+    @created_documents_count = current_user.documents.count
+    @all_documents_count = Document.all.count
+    per_page = 20
+    
+    if document_set == 'assigned'
+      @documents = Document.active.tagged_with(current_user.rep_group_list, :any =>true).paginate(:page => params[:page], :per_page => per_page).order('created_at DESC')
+    elsif document_set == 'created'
+      @documents = current_user.documents.paginate(:page => params[:page], :per_page => per_page).order('created_at DESC')
+    elsif can? :manage, Document && document_set == 'all'
+      @documents = Document.paginate(:page => params[:page], :per_page => per_page ).order("created_at DESC")
+    end
+  
     respond_to do |format|
       format.html # index.html.erb
       format.json { render json: @documents }
@@ -28,9 +45,23 @@ class DocumentsController < ApplicationController
       redirect_to @document, status: :moved_permanently
     end
 
+    # configuration for annotator [note that public schema won't have mel_catalog enabled]
+    @mel_catalog_enabled =  Tenant.mel_catalog_enabled
+    @annotation_categories_enabled =  Tenant.annotation_categories_enabled
+    @enable_rich_text_editor = ENV["ANNOTATOR_RICHTEXT"]
+    @tiny_mce_toolbar = @mel_catalog_enabled ? ENV["ANNOTATOR_RICHTEXT_WITH_CATALOG"] : ENV["ANNOTATOR_RICHTEXT_CONFIG"]
+    @api_url = ENV["API_URL"]
+
     respond_to do |format|
       format.html # show.html.erb
       format.json { render json: @document }
+    end
+  end
+
+  # GET /documents/1/preview
+  def preview 
+    respond_to do |format|
+      format.html # preview.html.erb
     end
   end
 
@@ -64,7 +95,7 @@ class DocumentsController < ApplicationController
     respond_to do |format|
       if @document.save
         if params[:document][:upload].present?
-          Delayed::Job.enqueue DocumentProcessor.new(@document.id, @document.state, current_tenant)
+          Delayed::Job.enqueue DocumentProcessor.new(@document.id, @document.state, Apartment::Database.current_tenant)
           @document.pending!
         end
         format.html { redirect_to documents_url, notice: 'Document was successfully created.', anchor: 'created'}
@@ -110,6 +141,87 @@ class DocumentsController < ApplicationController
     render :json => {}
   rescue Exception => e
     render :json => {}
+  end
+
+  def archive
+    respond_to do |format|
+      if @document.update_attribute(:state, 'archived')
+        format.html { redirect_to documents_url, notice: 'Document was successfully archived.', anchor: 'created'}
+      else
+        format.html { render action: "edit" }
+      end
+    end
+  end
+
+  def annotatable
+
+    respond_to do |format|
+      if @document.update_attribute(:state, 'annotatable')
+        format.html { redirect_to documents_url, notice: 'Document is now annotatable.', anchor: 'created'}
+      else
+        format.html { render action: "edit" }
+      end
+    end
+  end
+
+  def review
+
+    respond_to do |format|
+      if @document.update_attribute(:state, 'review')
+        format.html { redirect_to documents_url, notice: 'Document is now reviewable.', anchor: 'created'}
+      else
+        format.html { render action: "edit" }
+      end
+    end
+  end
+
+  def publish
+    # TODO: POST to COVE
+    respond_to do |format|
+      if @document.update_attribute(:state, 'published')
+        format.html { redirect_to documents_url, notice: 'Document is now publishable.', anchor: 'created'}
+      else
+        format.html { render action: "edit" }
+      end
+    end
+  end
+
+  #Export HTML
+  def export
+    send_data(@document.snapshot, filename: "#{@document.title}.html")
+  end
+
+  #Snapshot of document for export
+  def snapshot
+    @document.update_attribute(:snapshot, params[:snapshot])
+    render :json => {}
+  rescue Exception => e
+    render :json => {}
+  end
+
+  #POST document to COVE
+  def post_to_cove
+    document = {
+        title: @document.title,
+        body: { "und": [ { "value": @document.snapshot } ] },
+        "type":"editions_page",
+        format: "unfiltered_html",
+        "field_doc_owner":{"und":[@document.user.cove_id]}
+    }
+
+    unauth_token = ApiRequester::CoveClient.get_unauth_session
+    cookies = ApiRequester::CoveClient.get_cookie(unauth_token)
+    login_token = ApiRequester::CoveClient.get_login_session(cookies)
+    cove_object = ApiRequester::CoveClient.post(login_token, cookies, document)
+    cove_hash = JSON.parse(cove_object)
+
+    @document.cove_uri = cove_hash["uri"]
+    @document.save!
+
+    respond_to do |format|
+      link = %Q[<a href="#{@document.cove_uri}" target="cove-edition">View it now</a>]
+      format.html { redirect_to @document, notice: "Document was successfully posted to the COVE. #{link}".html_safe}
+    end
   end
 
   # Helper which accepts an array of items and filters out those you are not allowed to read, according to CanCan abilities.
@@ -159,9 +271,36 @@ class DocumentsController < ApplicationController
     end
   end
 
+  private
+
+  def catalog_texts
+
+    if catalogue_enabled?
+       status, results = Melcatalog.texts
+       return results[:text] unless results[:text].nil?
+    end
+    return []
+  end
+
   # helper to determine if we should support content from the MEL catalog
   def catalogue_enabled?
-    return( ENV["CATALOG_ENABLED"] == 'true' )
+    Tenant.current_tenant.mel_catalog_enabled
+  end
+  
+  def catalog_content( doc )
+
+    if catalogue_enabled?
+      # we put placeholder content in earlier and replace with the real thing now
+      if doc.text.start_with?( "EID:" )
+         eid = doc.text.split( ":",2 )[ 1 ]
+         status, entry = Melcatalog.get( eid, 'stripxml' )
+         if status == 200 && entry && entry[:text] && entry[:text][ 0 ] && entry[:text][ 0 ]['content']
+           doc.text = entry[:text][ 0 ]['content']
+         else
+           doc.text = "Error getting document content from the catalog; status = #{status}, eid = #{eid}"
+         end
+      end
+    end
   end
 
 private
@@ -170,7 +309,7 @@ private
   end
 
   def documents_params
-    params.require(:document).permit(:title, :state, :chapters, :text, :user_id, :rep_privacy_list,
+    params.require(:document).permit(:title, :state, :chapters, :text, :snapshot, :user_id, :rep_privacy_list,
                                      :rep_group_list, :new_group, :author, :edition, :publisher, 
                                      :publication_date, :source, :rights_status, :upload, :survey_link)
   end

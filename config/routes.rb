@@ -1,8 +1,13 @@
 AnnotationStudio::Application.routes.draw do
 
-  get 'public/:id' => 'public_documents#show'
+  get "api/me"
 
-  devise_for :users
+  use_doorkeeper
+
+  get 'public/:id' => 'public_documents#show'
+  get 'review/:id' => 'public_documents#show'
+
+  devise_for :users, controllers: {registrations: 'registrations', omniauth_callbacks: 'omniauth_callbacks'}
 
   devise_for :admin_users, ActiveAdmin::Devise.config
   ActiveAdmin.routes(self)
@@ -15,6 +20,14 @@ AnnotationStudio::Application.routes.draw do
   resources :documents do
     resources :annotations
     post :set_default_state
+    post :publish
+    post :annotatable
+    post :review
+    post :archive
+    post :snapshot
+    get :export
+    get :preview, to: 'documents#preview'
+    get :post_to_cove, to: 'documents#post_to_cove'
   end
 
   resources :users, only: [:show, :edit]
@@ -24,6 +37,7 @@ AnnotationStudio::Application.routes.draw do
     get 'dashboard', to: 'users#show', as: :dashboard
     get 'annotations', to: 'annotations#index'
     get 'annotations/:id', to: 'annotations#show'
+    get 'documents/:document_id/annotations/field/:field', to: 'annotations#field'
     get 'groups', to: 'groups#index'
     get 'groups/:id', to: 'groups#show'
   end
@@ -34,5 +48,11 @@ AnnotationStudio::Application.routes.draw do
     end
   end
 
+	get 'exception_test' => "annotations#exception_test"
   # root :to => "devise/sessions#new"
+
+  get '/admin/autocomplete_tags',
+    to: 'admin/students#autocomplete_tags',
+    as: 'autocomplete_tags'
+
 end

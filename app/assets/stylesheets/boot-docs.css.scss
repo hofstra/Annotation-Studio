@@ -26,7 +26,7 @@ pre {
 	border-radius: 0;
 }
 
-div#textcontent {
+div#textcontent, section#textcontent {
   margin-top: 30px;
 	font-family: "calluna";
 	padding: 60px;
@@ -117,13 +117,25 @@ li.annotation-item.focuswhite {
       outline: none;
     }
   }
+  img {
+    margin: 3px;
+    width: 300px;
+    max-height: 500px;
+  }
+  
+  iframe {
+    margin: 3px;
+    width: 300px;
+    height: 225px;
+  }
+  
 }
 
 #annotation-well ul#annotation-list li span.label, #annotation-well ul#annotation-list li span.badge {
 	color: #fff;
 	font-family: "source-sans-pro",sans-serif;
 	font-style: normal;
-	font-weight: 400;
+	font-weight: 400;  
 }
 
 .text_area {
@@ -338,12 +350,12 @@ span.highlightborder {
 	margin-top:5px;
 }
 
-#view-chooser {
-	margin-bottom:10px;
-}
-
-#filter-chooser {
+#view-chooser, #filter-chooser, #sort-chooser {
     margin-bottom:10px;
+    label.active {
+		background-color: #444;
+	    color: white;
+	}
 }
 
 .popover.bottom .arrow:after {
@@ -368,4 +380,14 @@ footer {
 #category-chooser button.btn-default:focus {
   background-color: #FFF;
   outline: none;
+}
+
+#snapshot-staging {
+	display:none;
+}
+
+#snapshot-progress {
+	.modal-dialog {
+		margin-top:200px;
+	}
 }
