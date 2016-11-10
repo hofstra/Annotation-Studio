@@ -25,6 +25,14 @@ module ApplicationHelper
     end
   end
 
+  def render_login
+    if ENV['LOGIN_FORM'] != ""
+      render partial: ENV['LOGIN_FORM']
+    else
+      render partial: "devise/sessions/sign_in"
+    end
+  end
+
   def home_banner
     if ENV['HOME_BANNER'] != ""
       return ENV['HOME_BANNER']
